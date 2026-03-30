@@ -4,9 +4,14 @@
 # Metrics endpoint: http://{{ coredns_prometheus_address }}/metrics
 #
 # Plugin chain per zone:
-#   file        — serves SOA and NS records from the zone file
-#   template    — explicit PTR blocks for known hosts (each with fallthrough)
-#   template    — catch-all: auto-generates PTR for any IP not matched above
+#   file        — serves SOA, NS, and explicit PTR records from the zone file;
+#                 falls through to the template when no PTR record is found
+#   template    — catch-all: auto-generates PTR for any IP not in the zone file
+#
+# Explicit PTR records live in the zone files (zones/db.*), not here.
+# Edit those files and run "make deploy-zones" to apply — no container restart needed.
+# Only the catch-all template lives here, because dynamic PTR generation
+# cannot be expressed in a standard zone file.
 #
 # This file is a Jinja2 template rendered by Ansible at deploy time.
 # {{ coredns_prometheus_address }} is set in group_vars/coredns_servers.yml.
@@ -19,19 +24,12 @@
 2.0.192.in-addr.arpa.:5300 {
     file /zones/db.2.0.192.in-addr.arpa {
         reload 60s
-    }
-
-{% raw %}
-    # ---- Explicit PTR records -----------------------------------------------
-    # Add one template block per host. Each block must have fallthrough so the
-    # catch-all at the end can handle any IP that does not match.
-    template IN PTR 2.0.192.in-addr.arpa. {
-        match ^1\.2\.0\.192\.in-addr\.arpa\.$
-        answer "{{ .Name }} 3600 IN PTR host1.example.com."
         fallthrough
     }
 
-    # ---- Catch-all: auto-generate PTR for any IP not matched above ----------
+{% raw %}
+    # Catch-all: auto-generate PTR for any IP not in the zone file.
+    # Example: 192.0.2.200 -> 192-0-2-200.example.com.
     template IN PTR 2.0.192.in-addr.arpa. {
         match ^(?P<octet>[0-9]+)\.2\.0\.192\.in-addr\.arpa\.$
         answer "{{ .Name }} 3600 IN PTR 192-0-2-{{ .Group.octet }}.example.com."
@@ -60,20 +58,11 @@
 0.0.8.b.d.0.1.0.0.2.ip6.arpa.:5300 {
     file /zones/db.0.0.8.b.d.0.1.0.0.2.ip6.arpa {
         reload 60s
-    }
-
-{% raw %}
-    # ---- Explicit PTR records -----------------------------------------------
-    # Add one template block per host. Each block must have fallthrough so the
-    # catch-all at the end can handle any address that does not match.
-    # 2001:db8::1 -> host1.example.com
-    template IN PTR 0.0.8.b.d.0.1.0.0.2.ip6.arpa. {
-        match ^1\.0\.0\.0\.0\.0\.0\.0\.0\.0\.0\.0\.0\.0\.0\.0\.0\.0\.0\.0\.0\.0\.0\.0\.8\.b\.d\.0\.1\.0\.0\.2\.ip6\.arpa\.$
-        answer "{{ .Name }} 3600 IN PTR host1.example.com."
         fallthrough
     }
 
-    # ---- Catch-all: auto-generate PTR for any IPv6 not matched above --------
+{% raw %}
+    # Catch-all: auto-generate PTR for any IPv6 not in the zone file.
     template IN PTR 0.0.8.b.d.0.1.0.0.2.ip6.arpa. {
         match ^(?P<n1>[0-9a-f])\.(?P<n2>[0-9a-f])\.(?P<n3>[0-9a-f])\.(?P<n4>[0-9a-f])\.(?P<n5>[0-9a-f])\.(?P<n6>[0-9a-f])\.(?P<n7>[0-9a-f])\.(?P<n8>[0-9a-f])\.(?P<n9>[0-9a-f])\.(?P<n10>[0-9a-f])\.(?P<n11>[0-9a-f])\.(?P<n12>[0-9a-f])\.(?P<n13>[0-9a-f])\.(?P<n14>[0-9a-f])\.(?P<n15>[0-9a-f])\.(?P<n16>[0-9a-f])\.(?P<n17>[0-9a-f])\.(?P<n18>[0-9a-f])\.(?P<n19>[0-9a-f])\.(?P<n20>[0-9a-f])\.(?P<n21>[0-9a-f])\.(?P<n22>[0-9a-f])\.0\.0\.8\.b\.d\.0\.1\.0\.0\.2\.ip6\.arpa\.$
         answer "{{ .Name }} 3600 IN PTR ip6-00{{ .Group.n22 }}{{ .Group.n21 }}-{{ .Group.n20 }}{{ .Group.n19 }}{{ .Group.n18 }}{{ .Group.n17 }}-{{ .Group.n16 }}{{ .Group.n15 }}{{ .Group.n14 }}{{ .Group.n13 }}-{{ .Group.n12 }}{{ .Group.n11 }}{{ .Group.n10 }}{{ .Group.n9 }}-{{ .Group.n8 }}{{ .Group.n7 }}{{ .Group.n6 }}{{ .Group.n5 }}-{{ .Group.n4 }}{{ .Group.n3 }}{{ .Group.n2 }}{{ .Group.n1 }}.example.com."

@@ -362,14 +362,14 @@ distributed-dns-stack/
 
 ## Managing Zone Files
 
-Zone files live in `zones/`. They contain **SOA and NS records only** — PTR records for known hosts are managed as template blocks in the Corefile (see [Zone Templates](#zone-templates-auto-generated-ptr-records) below).
+Zone files live in `zones/`. They contain **SOA, NS, and explicit PTR records** for known hosts. Any IP without an explicit PTR gets an auto-generated response from the catch-all template in the Corefile (see [Zone Templates](#zone-templates-auto-generated-ptr-records) below).
 
-### Editing a Zone File
+### Adding or Changing a PTR Record
 
-Common reasons to edit a zone file: updating nameservers, changing SOA parameters, or updating the serial after any change.
+PTR records for known hosts live directly in the zone file. Adding or changing one does not require a container restart — CoreDNS re-reads zone files on SIGHUP.
 
 ```bash
-# 1. Edit the zone file
+# 1. Edit the zone file — add or update a PTR record
 $EDITOR zones/db.2.0.192.in-addr.arpa
 
 # 2. Bump the SOA serial — always required after any change
@@ -381,6 +381,32 @@ make check
 # 4. Deploy — copies files to all servers and sends SIGHUP to CoreDNS
 make deploy-zones
 ```
+
+**IPv4 PTR format** — last octet only (zone provides the rest):
+```
+; In zones/db.2.0.192.in-addr.arpa
+1    IN  PTR  host1.example.com.
+50   IN  PTR  gateway.example.com.
+200  IN  PTR  server2.example.com.
+```
+
+**IPv6 PTR format** — use `scripts/ipv6-ptr.sh` to compute the label:
+```bash
+./scripts/ipv6-ptr.sh 2001:db8:f9:2::14:1 0.0.8.b.d.0.1.0.0.2.ip6.arpa
+# Zone label: 1.0.0.0.4.1.0.0.0.0.0.0.0.0.0.0.2.0.0.0.9.f.0.0
+```
+
+Then add the record to the zone file:
+```
+; In zones/db.0.0.8.b.d.0.1.0.0.2.ip6.arpa
+1.0.0.0.4.1.0.0.0.0.0.0.0.0.0.0.2.0.0.0.9.f.0.0   IN  PTR  host2.example.com.
+```
+
+**Remove** an explicit record — delete the PTR line from the zone file. The catch-all template will then auto-generate a PTR for that IP instead.
+
+### Editing SOA or Nameservers
+
+Common reasons to edit the non-PTR parts of a zone file: updating nameservers or changing SOA timing parameters.
 
 **Changing nameservers:** update both the SOA's primary NS field and the `NS` record(s):
 ```
@@ -462,7 +488,7 @@ $TTL 3600
 @   IN  NS   ns1.example.com.
 ```
 
-For IPv6, the `$ORIGIN` is the zone name. No PTR records go here — they are handled by templates in the Corefile.
+For IPv6, the `$ORIGIN` is the zone name. Explicit PTR records go in the zone file just like IPv4 — use `scripts/ipv6-ptr.sh` to compute the label.
 
 ### Step 3 — Add a Corefile Server Block
 
@@ -474,16 +500,10 @@ Open `ansible/roles/coredns/templates/Corefile.j2` and add a server block. The f
 1.0.10.in-addr.arpa.:5300 {
     file /zones/db.1.0.10.in-addr.arpa {
         reload 60s
-    }
-
-    # Explicit PTR for a known host — add one block per host, before the catch-all
-    template IN PTR 1.0.10.in-addr.arpa. {
-        match ^5\.1\.0\.10\.in-addr\.arpa\.$
-        answer "{{ .Name }} 3600 IN PTR gateway.example.com."
         fallthrough
     }
 
-    # Catch-all: auto-generate PTR for any IP not matched above
+    # Catch-all: auto-generate PTR for any IP not in the zone file
     template IN PTR 1.0.10.in-addr.arpa. {
         match ^(?P<octet>[0-9]+)\.1\.0\.10\.in-addr\.arpa\.$
         answer "{{ .Name }} 3600 IN PTR 10-0-1-{{ .Group.octet }}.example.com."
@@ -497,6 +517,8 @@ Open `ansible/roles/coredns/templates/Corefile.j2` and add a server block. The f
 }
 ```
 
+Explicit PTR records for known hosts go in `zones/db.1.0.10.in-addr.arpa`, not in the Corefile. The Corefile only needs this catch-all — it never changes once configured for the zone.
+
 > **Note:** `{{ coredns_prometheus_address }}` is a Jinja2 variable resolved by Ansible. `{{ .Name }}` and `{{ .Group.octet }}` are CoreDNS Go template fields — type them literally in the `.j2` file. See the existing server blocks in `Corefile.j2` for the correct pattern using `{% raw %}` blocks.
 
 **IPv6 /48 example** (`1.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa` for `2001:db8:1::/48`):
@@ -507,6 +529,7 @@ A /48 leaves 80 variable bits = 20 nibbles. Groups of 4 produce 5 clean groups �
 1.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa.:5300 {
     file /zones/db.1.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa {
         reload 60s
+        fallthrough
     }
 
     # Catch-all: auto-generate PTR (20 variable nibbles → 5 groups of 4)
@@ -547,18 +570,19 @@ CoreDNS's `template` plugin generates PTR responses dynamically for IPs that don
 
 ### How It Works
 
-The Corefile uses a two-level template chain for each zone:
+Each zone uses a two-step plugin chain:
 
-1. **Specific template** — exact-match regex for known hosts; has `fallthrough` so non-matching queries reach the next template
+1. **`file` plugin** — serves SOA, NS, and any explicit PTR records from the zone file; if no PTR is found, falls through to the template
 2. **Catch-all template** — matches any IP in the zone and generates an automatic hostname
 
 ```
 CoreDNS plugin chain per zone:
-  file plugin         → serves SOA, NS records; always passes through to next plugin
-  specific template   → matches explicit hosts (e.g. 192.0.2.1 → host1.example.com)
-      ↓ (fallthrough on no-match)
-  catch-all template  → auto-generates PTR for everything else
+  file plugin      → serves explicit PTRs (e.g. 192.0.2.1 → host1.example.com)
+      ↓ fallthrough (when no PTR record found in zone file)
+  catch-all template → auto-generates PTR for everything else
 ```
+
+Explicit PTRs go in the **zone file** — edit and deploy with `make deploy-zones` (SIGHUP, no downtime). The Corefile only contains the catch-all template, which never needs to change once configured for a zone.
 
 ### Auto-generated Hostname Format
 
@@ -595,37 +619,13 @@ The `ip6-` prefix and grouping are just convention — change them to any format
 
 ### Adding or Editing an Explicit PTR Record
 
-**Add** a template block **before** the catch-all block for the relevant zone:
+Explicit PTRs live in the zone file. Edit the file, bump the serial, and deploy — no Corefile change or container restart needed.
 
-IPv4 — the `match` is the full PTR query name with each dot escaped as `\.`:
-```
-template IN PTR 2.0.192.in-addr.arpa. {
-    match ^14\.2\.0\.192\.in-addr\.arpa\.$
-    answer "{{ .Name }} 3600 IN PTR newhost.example.com."
-    fallthrough
-}
-```
+See [Adding or Changing a PTR Record](#adding-or-changing-a-ptr-record) above for the full workflow.
 
-IPv6 — first get the PTR label:
-```bash
-./scripts/ipv6-ptr.sh 2001:db8:f9:2::14:1 0.0.8.b.d.0.1.0.0.2.ip6.arpa
-# Zone label: 1.0.0.0.4.1.0.0.0.0.0.0.0.0.0.0.2.0.0.0.9.f.0.0
-```
+**Remove** an explicit record — delete the PTR line from the zone file. The catch-all template will then auto-generate a PTR for that IP instead.
 
-Then add a template block — the `match` is the full query name (zone label + zone name), each dot escaped:
-```
-template IN PTR 0.0.8.b.d.0.1.0.0.2.ip6.arpa. {
-    match ^1\.0\.0\.0\.4\.1\.0\.0\.0\.0\.0\.0\.0\.0\.0\.0\.2\.0\.0\.0\.9\.f\.0\.0\.8\.b\.d\.0\.1\.0\.0\.2\.ip6\.arpa\.$
-    answer "{{ .Name }} 3600 IN PTR newhost.example.com."
-    fallthrough
-}
-```
-
-**Edit** an existing explicit record — find the template block with the matching `match` regex and change the hostname in the `answer` line.
-
-**Remove** an explicit record — delete the entire `template` block. The catch-all will then generate an auto-PTR for that IP instead.
-
-After any Corefile change, run `make deploy`.
+After any zone file change, run `make deploy-zones`.
 
 ### Adapting Templates for Different Prefix Lengths
 
