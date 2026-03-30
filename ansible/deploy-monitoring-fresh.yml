@@ -1,0 +1,44 @@
+---
+# First-time deployment of monitoring stack on a fresh server.
+# Installs Docker everywhere, then deploys Prometheus + Loki + Grafana on
+# monitoring_servers and Promtail on all DNS servers.
+#
+# Usage: ansible-playbook deploy-monitoring-fresh.yml
+#
+# For subsequent config updates (no Docker install needed), use deploy-monitoring.yml instead.
+
+- name: Install Docker on monitoring server
+  hosts: monitoring_servers
+  become: true
+  roles:
+    - docker
+
+- name: Install Docker on CoreDNS servers (for Promtail)
+  hosts: coredns_servers
+  become: true
+  roles:
+    - docker
+
+- name: Install Docker on dnsdist servers (for Promtail)
+  hosts: dnsdist_servers
+  become: true
+  roles:
+    - docker
+
+- name: Update Promtail on CoreDNS servers
+  hosts: coredns_servers
+  become: true
+  roles:
+    - promtail
+
+- name: Update Promtail on dnsdist servers
+  hosts: dnsdist_servers
+  become: true
+  roles:
+    - promtail
+
+- name: Deploy monitoring stack (Prometheus + Loki + Grafana)
+  hosts: monitoring_servers
+  become: true
+  roles:
+    - monitoring

@@ -1,0 +1,24 @@
+---
+# Variables for the monitoring server (Prometheus + Loki + Grafana).
+#
+# ── All-in-one deployment (default) ─────────────────────────────────────────
+# Loki listens on localhost only — safe when Promtail runs on the same server.
+# No changes needed for a single-server all-in-one deployment.
+#
+# ── DNS servers on separate hosts ────────────────────────────────────────────
+# When DNS servers (and their Promtail agents) are on different hosts and need
+# to push logs to this Loki instance, change:
+#   loki_http_listen_address: "0.0.0.0"
+#
+# Also ensure your firewall allows TCP port 3100 from each DNS server's IP.
+#
+# Prometheus always runs on localhost-only; it scrapes DNS servers via their
+# public IPs (controlled by metrics_scrape_address in dnsdist_servers/coredns_servers group vars).
+
+# Address Loki listens on for HTTP connections (Promtail push + Grafana queries).
+# Use 127.0.0.1 when Promtail runs on the same host as Loki (default).
+# Use 0.0.0.0 when Promtail agents run on remote DNS servers.
+loki_http_listen_address: "127.0.0.1"
+
+# Address Loki listens on for gRPC (internal only — no need to expose externally).
+loki_grpc_listen_address: "127.0.0.1"

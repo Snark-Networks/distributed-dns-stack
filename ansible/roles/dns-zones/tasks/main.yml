@@ -1,0 +1,54 @@
+---
+# Syncs zone files from the repo's zones/ directory to /opt/coredns/zones/ on
+# each CoreDNS server, then reloads CoreDNS via SIGHUP if any file changed.
+
+- name: Ensure zones directory exists
+  file:
+    path: /opt/coredns/zones
+    state: directory
+    mode: "0755"
+
+- name: Find local zone files to deploy
+  find:
+    paths: "{{ playbook_dir }}/../zones"
+    patterns: "db.*"
+    file_type: file
+  delegate_to: localhost
+  register: local_zone_files
+
+- name: Validate zone files with named-checkzone (if available)
+  shell: |
+    zone=$(basename {{ item.path }} | sed 's/^db\.//')
+    if command -v named-checkzone >/dev/null 2>&1; then
+      named-checkzone "$zone" "{{ item.path }}"
+    else
+      echo "named-checkzone not found, skipping validation for $zone"
+    fi
+  loop: "{{ local_zone_files.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  delegate_to: localhost
+  changed_when: false
+
+- name: Copy zone files to server
+  copy:
+    src: "{{ item.path }}"
+    dest: /opt/coredns/zones/{{ item.path | basename }}
+    mode: "0644"
+  loop: "{{ local_zone_files.files }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  register: zone_copy_result
+
+- name: Reload CoreDNS if any zone file changed
+  command: docker kill --signal=SIGHUP coredns
+  when: zone_copy_result.changed
+  # Ignore errors: if CoreDNS just started it may need a moment;
+  # the file plugin's 60s reload poll will pick up changes anyway.
+  ignore_errors: true
+
+- name: Report zone deployment status
+  debug:
+    msg: >-
+      {{ zone_copy_result.results | selectattr('changed') | map(attribute='dest') | list
+         | default(['No zone files changed']) }}

@@ -1,0 +1,27 @@
+---
+# Promtail — ships CoreDNS container logs to Loki.
+#
+# Runs on dnsdist_servers and coredns_servers independently. Deployed separately
+# from the monitoring stack so it can run on different hosts from Prometheus/Loki/Grafana.
+#
+# Loki push URL is set in config.yml (rendered from config.yml.j2 by Ansible).
+# Controlled by loki_push_url in group_vars/dnsdist_servers.yml or coredns_servers.yml.
+
+services:
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: promtail
+    restart: unless-stopped
+    network_mode: host
+    user: root
+    volumes:
+      - /opt/promtail/config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /opt/promtail/positions:/tmp/positions
+    command: -config.file=/etc/promtail/config.yml
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,0 +1,11 @@
+---
+- name: Restart dnsdist
+  command: docker compose -f /opt/dnsdist/docker-compose.yml restart dnsdist
+  listen: "Restart dnsdist"
+
+- name: Enable dnsdist systemd unit
+  systemd:
+    name: dnsdist
+    enabled: yes
+    daemon_reload: yes
+  listen: "Enable dnsdist systemd unit"

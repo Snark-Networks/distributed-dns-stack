@@ -1,0 +1,523 @@
+{
+  "title": "dnsdist — Query Logs & Metrics",
+  "uid": "dnsdist-v1",
+  "description": "dnsdist frontend: real client IPs, query types, latency, backend health, and drop rates",
+  "tags": ["dns", "dnsdist"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "host",
+        "label": "DNS Server",
+        "type": "query",
+        "datasource": { "type": "loki", "uid": "loki" },
+        "definition": "label_values({container=\"dnsdist\"}, host)",
+        "query": "label_values({container=\"dnsdist\"}, host)",
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 2
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Query Rate",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1000 },
+              { "color": "red", "value": 10000 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(dnsdist_queries[2m])",
+          "legendFormat": "QPS"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "NXDOMAIN Rate",
+      "type": "stat",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(dnsdist_nxdomain_responses[2m])",
+          "legendFormat": "NXDOMAIN/s"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "SERVFAIL Rate",
+      "type": "stat",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(dnsdist_servfail_responses[2m])",
+          "legendFormat": "SERVFAIL/s"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Avg Latency (last 1000 queries)",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "µs",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5000 },
+              { "color": "red", "value": 20000 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "dnsdist_latency_avg1000",
+          "legendFormat": "Latency"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Drops (ACL + Rules)",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(dnsdist_acl_drops[2m]) + rate(dnsdist_rule_drop[2m])",
+          "legendFormat": "Drops/s"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Backend Status",
+      "type": "stat",
+      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "orientation": "auto",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+          ],
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "dnsdist_server_state",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Queries & Responses per Second",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2 } }
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "rate(dnsdist_queries[2m])",
+          "legendFormat": "Queries in"
+        },
+        {
+          "expr": "rate(dnsdist_responses[2m])",
+          "legendFormat": "Responses out"
+        },
+        {
+          "expr": "rate(dnsdist_queries_dropped[2m])",
+          "legendFormat": "Dropped"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Response Codes",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "SERVFAIL" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "NXDOMAIN" }, "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "NOERROR" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "rate(dnsdist_responses[2m]) - rate(dnsdist_nxdomain_responses[2m]) - rate(dnsdist_servfail_responses[2m])",
+          "legendFormat": "NOERROR"
+        },
+        {
+          "expr": "rate(dnsdist_nxdomain_responses[2m])",
+          "legendFormat": "NXDOMAIN"
+        },
+        {
+          "expr": "rate(dnsdist_servfail_responses[2m])",
+          "legendFormat": "SERVFAIL"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "title": "Latency Over Time",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "µs", "custom": { "lineWidth": 2 } }
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "dnsdist_latency_avg100",
+          "legendFormat": "Avg last 100"
+        },
+        {
+          "expr": "dnsdist_latency_avg1000",
+          "legendFormat": "Avg last 1000"
+        },
+        {
+          "expr": "dnsdist_server_latency",
+          "legendFormat": "Backend {{name}}"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "title": "Drops & ACL Blocks",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "lineWidth": 2 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "ACL Drops" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Rule Drops" }, "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Dyn Blocked" }, "properties": [{ "id": "color", "value": { "fixedColor": "purple", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Downstream Timeouts" }, "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }] }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "rate(dnsdist_acl_drops[2m])",
+          "legendFormat": "ACL Drops"
+        },
+        {
+          "expr": "rate(dnsdist_rule_drop[2m])",
+          "legendFormat": "Rule Drops"
+        },
+        {
+          "expr": "rate(dnsdist_dyn_blocked[2m])",
+          "legendFormat": "Dyn Blocked"
+        },
+        {
+          "expr": "rate(dnsdist_downstream_timeouts[2m])",
+          "legendFormat": "Downstream Timeouts"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "title": "Backend Query Rate",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2 } }
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "expr": "rate(dnsdist_server_queries[2m])",
+          "legendFormat": "{{name}} ({{address}})"
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "title": "Backend Drops & Send Errors",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "lineWidth": 2 } }
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "expr": "rate(dnsdist_server_drops[2m])",
+          "legendFormat": "Drops {{name}}"
+        },
+        {
+          "expr": "rate(dnsdist_downstream_send_errors[2m])",
+          "legendFormat": "Send Errors"
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "title": "Top Client IPs — Real Source (last 1h)",
+      "description": "Client IPs from dnsdist LogAction → Promtail → Loki. These are the actual DNS client IPs, not 127.0.0.1.",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 28, "w": 8, "h": 10 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": { "footer": { "show": false } },
+      "targets": [
+        {
+          "expr": "topk(20, sum by (client_ip) (count_over_time({container=\"dnsdist\", client_ip!=\"\"}[$__range])))",
+          "legendFormat": "",
+          "queryType": "range",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "transformations": [
+        { "id": "labelsToFields", "options": { "mode": "columns" } },
+        { "id": "organize", "options": { "renameByName": { "client_ip": "Client IP", "Value": "Queries" } } },
+        { "id": "sortBy", "options": { "fields": [{ "desc": true, "displayName": "Queries" }] } }
+      ]
+    },
+    {
+      "id": 41,
+      "title": "Top Queried Names (last 1h)",
+      "type": "table",
+      "gridPos": { "x": 8, "y": 28, "w": 8, "h": 10 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": { "footer": { "show": false } },
+      "targets": [
+        {
+          "expr": "topk(20, sum by (qname) (count_over_time({container=\"dnsdist\", qname!=\"\"}[$__range])))",
+          "legendFormat": "",
+          "queryType": "range",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "transformations": [
+        { "id": "labelsToFields", "options": { "mode": "columns" } },
+        { "id": "organize", "options": { "renameByName": { "qname": "Query Name", "Value": "Count" } } },
+        { "id": "sortBy", "options": { "fields": [{ "desc": true, "displayName": "Count" }] } }
+      ]
+    },
+    {
+      "id": 42,
+      "title": "Query Types (last 1h)",
+      "type": "piechart",
+      "gridPos": { "x": 16, "y": 28, "w": 8, "h": 10 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (qtype) (count_over_time({container=\"dnsdist\", qtype!=\"\"}[$__range]))",
+          "legendFormat": "{{qtype}}",
+          "queryType": "range",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "transformations": [
+        { "id": "labelsToFields", "options": { "mode": "columns" } }
+      ]
+    },
+    {
+      "id": 50,
+      "title": "Per-Server Query Volume (last 1h)",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 38, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": { "footer": { "show": false } },
+      "targets": [
+        {
+          "expr": "sum by (host) (count_over_time({container=\"dnsdist\"}[$__range]))",
+          "legendFormat": "",
+          "queryType": "range",
+          "instant": false,
+          "range": true
+        }
+      ],
+      "transformations": [
+        { "id": "labelsToFields", "options": { "mode": "columns" } },
+        { "id": "organize", "options": { "renameByName": { "host": "DNS Server", "Value": "Queries" } } },
+        { "id": "sortBy", "options": { "fields": [{ "desc": true, "displayName": "Queries" }] } }
+      ]
+    },
+    {
+      "id": 51,
+      "title": "Queries per Server Over Time",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 38, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "fieldConfig": {
+        "defaults": { "custom": { "lineWidth": 2 } }
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (host) (rate({container=\"dnsdist\"}[2m]))",
+          "legendFormat": "{{host}}"
+        }
+      ]
+    },
+    {
+      "id": 60,
+      "title": "Live dnsdist Query Log",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 46, "w": 24, "h": 10 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "expr": "{container=\"dnsdist\"} |= \"question\"",
+          "legendFormat": ""
+        }
+      ]
+    }
+  ]
+}

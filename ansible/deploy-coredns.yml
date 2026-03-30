@@ -1,0 +1,26 @@
+---
+# Deploy or update CoreDNS backend servers only.
+# Use this to add a new CoreDNS server or update Corefile/zones without
+# touching dnsdist frontends or monitoring.
+#
+# After adding a new CoreDNS server here, also run:
+#   ansible-playbook deploy-dnsdist.yml    — rebuilds dnsdist.conf with the new backend
+#   ansible-playbook deploy-monitoring.yml — updates Prometheus scrape config
+#
+# Usage:
+#   ansible-playbook deploy-coredns.yml               # all coredns_servers
+#   ansible-playbook deploy-coredns.yml -l coredns02  # one server only
+
+- name: Install Docker on CoreDNS servers
+  hosts: coredns_servers
+  become: true
+  roles:
+    - docker
+
+- name: Deploy CoreDNS (authoritative backend)
+  hosts: coredns_servers
+  become: true
+  roles:
+    - coredns
+    - dns-zones
+    - promtail

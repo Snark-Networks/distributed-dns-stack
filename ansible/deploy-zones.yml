@@ -1,0 +1,12 @@
+---
+# Sync zone files only and reload CoreDNS — no Docker/stack changes.
+# Zone files live on CoreDNS servers (not dnsdist servers).
+#
+# Usage:
+#   ansible-playbook deploy-zones.yml
+#   ansible-playbook deploy-zones.yml -l coredns01   # one server only
+- name: Deploy zone files and reload CoreDNS
+  hosts: coredns_servers
+  become: true
+  roles:
+    - dns-zones

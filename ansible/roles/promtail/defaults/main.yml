@@ -1,0 +1,8 @@
+---
+# Default values for the promtail role.
+# Override in ansible/inventory/group_vars/dnsdist_servers.yml,
+# group_vars/coredns_servers.yml, or per-host in hosts.yml.
+
+# Where to push logs (Loki push API endpoint).
+# Overridden by loki_push_url from the relevant group_vars file.
+loki_push_url: "http://127.0.0.1:3100/loki/api/v1/push"

@@ -1,0 +1,11 @@
+---
+- name: Restart Promtail
+  command: docker compose -f /opt/promtail/docker-compose.yml up -d --force-recreate
+  listen: "Restart Promtail"
+
+- name: Enable Promtail systemd unit
+  systemd:
+    name: promtail
+    enabled: yes
+    daemon_reload: yes
+  listen: "Enable Promtail systemd unit"

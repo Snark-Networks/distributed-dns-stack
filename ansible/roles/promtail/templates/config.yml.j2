@@ -1,0 +1,111 @@
+server:
+  http_listen_address: 127.0.0.1
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: warn
+
+positions:
+  filename: /tmp/positions/positions.yaml
+
+clients:
+  # loki_push_url is set in group_vars/dnsdist_servers.yml or group_vars/coredns_servers.yml.
+  # Default: http://127.0.0.1:3100/loki/api/v1/push (same-server monitoring).
+  # Change to http://<monitoring-server-ip>:3100/loki/api/v1/push for a separate server.
+  - url: {{ loki_push_url }}
+
+scrape_configs:
+  # ── CoreDNS query logs ──────────────────────────────────────────────────────
+  # Discovers the coredns container via the Docker socket, tails its JSON logs,
+  # and parses each DNS query line into structured labels for Grafana/Loki queries.
+  #
+  # CoreDNS log format (from the 'log' plugin):
+  #   [INFO] 1.2.3.4:12345 - 1234 "PTR IN 1.2.0.192.in-addr.arpa. udp 40 false 512" NOERROR qr,aa,rd 195 0.000282s
+  #
+  # Extracted labels:
+  #   level      — INFO / ERROR
+  #   client_ip  — source IP of the query
+  #   qtype      — query type: PTR, SOA, AXFR, ...
+  #   qname      — the queried name (e.g. 1.2.0.192.in-addr.arpa.)
+  #   proto      — udp or tcp
+  #   rcode      — NOERROR, NXDOMAIN, SERVFAIL, ...
+
+  # ── dnsdist query logs ─────────────────────────────────────────────────────
+  # Tails the dnsdist container logs to capture real client IPs.
+  # dnsdist log format (LogAction):
+  #   Remote CLIENT_IP:PORT sent question for 'QNAME' (QTYPE) with id ID
+  #
+  # Extracted labels:
+  #   client_ip  — real source IP of the DNS client
+  #   qname      — the queried name
+  #   qtype      — query type: PTR, SOA, A, AAAA, ...
+
+  - job_name: dnsdist
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 10s
+    relabel_configs:
+      - source_labels: [__meta_docker_container_name]
+        regex: /dnsdist
+        action: keep
+      - source_labels: [__meta_docker_container_name]
+        regex: /(.+)
+        target_label: container
+      - replacement: {{ inventory_hostname }}
+        target_label: host
+
+    pipeline_stages:
+      - json:
+          expressions:
+            output: log
+            stream: stream
+      - output:
+          source: output
+
+      - match:
+          selector: '{container="dnsdist"}'
+          stages:
+            - regex:
+                expression: 'Remote (?P<client_ip>[\d.a-fA-F:]+):\d+ \w+ question for .(?P<qname>[^'']+). \((?P<qtype>\w+)\)'
+            - labels:
+                client_ip:
+                qname:
+                qtype:
+
+  - job_name: coredns
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 10s
+    relabel_configs:
+      # Only tail the coredns container
+      - source_labels: [__meta_docker_container_name]
+        regex: /coredns
+        action: keep
+      - source_labels: [__meta_docker_container_name]
+        regex: /(.+)
+        target_label: container
+      # inventory_hostname is the Ansible host alias (e.g. coredns01, coredns02)
+      - replacement: {{ inventory_hostname }}
+        target_label: host
+
+    pipeline_stages:
+      # Docker log driver wraps each line in JSON: {"log":"...\n","stream":"stdout","time":"..."}
+      - json:
+          expressions:
+            output: log
+            stream: stream
+      - output:
+          source: output
+
+      # Parse CoreDNS query log lines
+      - match:
+          selector: '{container="coredns"}'
+          stages:
+            - regex:
+                expression: '^\[(?P<level>\w+)\]\s+(?P<client_ip>[\d.a-fA-F:]+):\d+\s+-\s+\d+\s+"(?P<qtype>\w+)\s+\w+\s+(?P<qname>[\w.\-]+)\s+(?P<proto>\w+)[^"]*"\s+(?P<rcode>\w+)'
+            - labels:
+                level:
+                client_ip:
+                qtype:
+                qname:
+                rcode:
+                proto:

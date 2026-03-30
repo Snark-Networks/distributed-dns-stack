@@ -1,0 +1,91 @@
+---
+- name: Create monitoring directory structure
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /opt/monitoring
+    - /opt/monitoring/prometheus/data
+    - /opt/monitoring/loki/data
+    - /opt/monitoring/loki/chunks
+    - /opt/monitoring/loki/rules
+    - /opt/monitoring/loki/compactor
+    - /opt/monitoring/grafana/data
+    - /opt/monitoring/grafana/provisioning/datasources
+    - /opt/monitoring/grafana/provisioning/dashboards
+
+- name: Deploy monitoring docker-compose.yml
+  copy:
+    src: docker-compose.yml
+    dest: /opt/monitoring/docker-compose.yml
+    mode: "0644"
+  notify: Restart monitoring stack
+
+- name: Deploy Prometheus configuration
+  template:
+    src: prometheus.yml.j2
+    dest: /opt/monitoring/prometheus/prometheus.yml
+    mode: "0644"
+  notify: Reload Prometheus
+
+- name: Deploy Loki configuration
+  template:
+    src: loki-config.yml.j2
+    dest: /opt/monitoring/loki/config.yml
+    mode: "0644"
+  notify: Restart Loki
+
+- name: Deploy Grafana datasources
+  copy:
+    src: grafana/provisioning/datasources/datasources.yml
+    dest: /opt/monitoring/grafana/provisioning/datasources/datasources.yml
+    mode: "0644"
+  notify: Restart Grafana
+
+- name: Deploy Grafana dashboard config
+  copy:
+    src: grafana/provisioning/dashboards/dashboards.yml
+    dest: /opt/monitoring/grafana/provisioning/dashboards/dashboards.yml
+    mode: "0644"
+  notify: Restart Grafana
+
+- name: Deploy Grafana dashboard JSON files
+  copy:
+    src: grafana/provisioning/dashboards/
+    dest: /opt/monitoring/grafana/provisioning/dashboards/
+    mode: "0644"
+  notify: Restart Grafana
+
+- name: Pull monitoring Docker images
+  command: docker compose -f /opt/monitoring/docker-compose.yml pull
+  changed_when: false
+
+- name: Start monitoring stack
+  command: docker compose -f /opt/monitoring/docker-compose.yml up -d
+  changed_when: false
+
+- name: Install systemd unit for monitoring stack
+  copy:
+    dest: /etc/systemd/system/monitoring-stack.service
+    content: |
+      [Unit]
+      Description=Monitoring Stack (Prometheus + Loki + Grafana)
+      After=docker.service
+      Requires=docker.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      WorkingDirectory=/opt/monitoring
+      ExecStart=/usr/bin/docker compose up -d
+      ExecStop=/usr/bin/docker compose down
+      TimeoutStartSec=120
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: "0644"
+  notify: Enable monitoring systemd unit
+
+- name: Flush handlers
+  meta: flush_handlers

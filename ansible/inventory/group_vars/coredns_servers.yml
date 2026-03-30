@@ -1,0 +1,30 @@
+---
+# Variables for CoreDNS authoritative backend servers.
+#
+# ── Metrics ───────────────────────────────────────────────────────────────────
+
+# Address CoreDNS binds its Prometheus metrics endpoint to.
+# Default: 0.0.0.0 — bind on all interfaces so a separate monitoring server
+# can scrape metrics. Change to 127.0.0.1 if monitoring is co-located.
+coredns_prometheus_address: "0.0.0.0:9153"
+
+# ── DNS listen port ───────────────────────────────────────────────────────────
+
+# Port CoreDNS listens on for DNS queries from dnsdist frontends.
+# Must match coredns_dns_port in dnsdist_servers.yml.
+# NOT port 53 — CoreDNS is the backend; dnsdist is the public-facing frontend.
+coredns_dns_port: 5300
+
+# ── Log shipping ──────────────────────────────────────────────────────────────
+
+# Loki push endpoint for Promtail running on this CoreDNS server.
+# Use http://127.0.0.1:3100/loki/api/v1/push when monitoring is co-located.
+# Use http://<monitoring-server-ip>:3100/loki/api/v1/push for a separate server.
+loki_push_url: "http://127.0.0.1:3100/loki/api/v1/push"
+
+# ── Prometheus scrape target ──────────────────────────────────────────────────
+
+# IP address Prometheus uses to scrape the CoreDNS metrics endpoint on this host.
+# Default: 127.0.0.1 — correct when monitoring runs on the same host.
+# For split deployments: override per-host in hosts.yml with this server's actual IP.
+metrics_scrape_address: "127.0.0.1"

@@ -1,0 +1,23 @@
+---
+- name: Restart monitoring stack
+  command: docker compose -f /opt/monitoring/docker-compose.yml up -d --force-recreate
+  listen: "Restart monitoring stack"
+
+- name: Reload Prometheus
+  command: docker compose -f /opt/monitoring/docker-compose.yml restart prometheus
+  listen: "Reload Prometheus"
+
+- name: Restart Loki
+  command: docker compose -f /opt/monitoring/docker-compose.yml restart loki
+  listen: "Restart Loki"
+
+- name: Restart Grafana
+  command: docker compose -f /opt/monitoring/docker-compose.yml restart grafana
+  listen: "Restart Grafana"
+
+- name: Enable monitoring systemd unit
+  systemd:
+    name: monitoring-stack
+    enabled: yes
+    daemon_reload: yes
+  listen: "Enable monitoring systemd unit"

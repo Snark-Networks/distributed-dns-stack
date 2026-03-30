@@ -1,0 +1,39 @@
+---
+# Full deployment: installs Docker on all servers, then deploys each tier
+# in dependency order: CoreDNS first (backends), then dnsdist (frontends),
+# then monitoring.
+#
+# Usage: ansible-playbook site.yml
+#
+# For targeted deployments:
+#   ansible-playbook deploy-coredns.yml      — CoreDNS backends only
+#   ansible-playbook deploy-dnsdist.yml      — dnsdist frontends only
+#   ansible-playbook deploy-monitoring.yml   — monitoring stack only
+#   ansible-playbook deploy-zones.yml        — zone files only (fast reload)
+
+- name: Install Docker on all servers
+  hosts: all
+  become: true
+  roles:
+    - docker
+
+- name: Deploy CoreDNS (authoritative backend)
+  hosts: coredns_servers
+  become: true
+  roles:
+    - coredns
+    - dns-zones
+    - promtail
+
+- name: Deploy dnsdist (frontend load balancer)
+  hosts: dnsdist_servers
+  become: true
+  roles:
+    - dnsdist
+    - promtail
+
+- name: Deploy monitoring stack (Prometheus + Loki + Grafana)
+  hosts: monitoring_servers
+  become: true
+  roles:
+    - monitoring

@@ -1,0 +1,13 @@
+---
+- name: Restart CoreDNS
+  # Full container restart needed for Corefile changes (new zones, new/modified
+  # templates, plugin config). SIGHUP handles zone file reloads only.
+  command: docker compose -f /opt/coredns/docker-compose.yml restart coredns
+  listen: "Restart CoreDNS"
+
+- name: Enable coredns systemd unit
+  systemd:
+    name: coredns
+    enabled: yes
+    daemon_reload: yes
+  listen: "Enable coredns systemd unit"

@@ -1,0 +1,29 @@
+---
+# Deploy or update the monitoring stack (Prometheus + Loki + Grafana).
+# Also updates Promtail on all DNS servers (in case loki_push_url changed).
+#
+# Usage: ansible-playbook deploy-monitoring.yml
+#
+# Run this after:
+#   - Changing monitoring configuration (Prometheus scrapes, Loki retention, etc.)
+#   - Adding a new dnsdist or CoreDNS server (updates Prometheus scrape config)
+#   - Changing loki_push_url (updates Promtail on all DNS servers)
+#   - Changing dnsdist_webserver_password in group_vars/all.yml
+
+- name: Update Promtail on CoreDNS servers
+  hosts: coredns_servers
+  become: true
+  roles:
+    - promtail
+
+- name: Update Promtail on dnsdist servers
+  hosts: dnsdist_servers
+  become: true
+  roles:
+    - promtail
+
+- name: Deploy monitoring stack (Prometheus + Loki + Grafana)
+  hosts: monitoring_servers
+  become: true
+  roles:
+    - monitoring

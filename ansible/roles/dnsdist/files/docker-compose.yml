@@ -1,0 +1,29 @@
+---
+# dnsdist — DNS load balancer / public-facing frontend on port 53
+#
+# Uses host networking so dnsdist can bind to all IPv4/IPv6 interfaces on
+# port 53 without NAT complications. Runs as root to bind privileged ports;
+# dnsdist drops privileges after binding.
+#
+# CoreDNS backends are configured in dnsdist.conf (rendered from dnsdist.conf.j2).
+# They may be on this host (127.0.0.1:5300) or on separate CoreDNS servers.
+
+services:
+  dnsdist:
+    image: powerdns/dnsdist-19:latest
+    container_name: dnsdist
+    restart: unless-stopped
+    network_mode: host
+    user: root
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - /opt/dnsdist/dnsdist.conf:/etc/dnsdist/dnsdist.conf:ro
+    command: ["--supervised", "--disable-syslog", "--log-timestamps"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"

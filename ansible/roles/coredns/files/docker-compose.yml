@@ -1,0 +1,25 @@
+---
+# CoreDNS — authoritative DNS backend
+#
+# Uses host networking so CoreDNS can listen on port 5300 on all interfaces.
+# Port 5300 is NOT port 53 — it is not exposed publicly. Access is controlled
+# at the network level; only dnsdist frontends should reach it.
+#
+# Corefile and zone files are mounted read-only from /opt/coredns/ on the host.
+# Zone files are deployed and reloaded by the dns-zones Ansible role.
+
+services:
+  coredns:
+    image: coredns/coredns:1.11.3
+    container_name: coredns
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /opt/coredns/Corefile:/Corefile:ro
+      - /opt/coredns/zones:/zones:ro
+    command: -conf /Corefile
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"

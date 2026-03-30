@@ -1,0 +1,25 @@
+; Zone file: 2.0.192.in-addr.arpa
+; Reverse DNS for 192.0.2.0/24
+;
+; SOA serial format: YYYYMMDDnn (date + 2-digit increment)
+; Run scripts/update-serial.sh before deploying after any change.
+;
+; This file contains SOA and NS records only.
+; PTR records are managed as template blocks in the Corefile — see
+; ansible/roles/coredns/templates/Corefile.j2 for explicit host entries
+; and the catch-all auto-PTR template.
+;
+$ORIGIN 2.0.192.in-addr.arpa.
+$TTL 3600
+
+@   IN  SOA ns1.example.com. hostmaster.example.com. (
+            2026032802  ; Serial  — increment after each change
+            3600        ; Refresh — how often secondaries poll
+            900         ; Retry   — retry interval on failed refresh
+            604800      ; Expire  — secondary stops answering after this
+            300         ; Minimum TTL (negative caching)
+        )
+
+; Name servers — update these to your actual NS hostnames
+@   IN  NS  ns1.example.com.
+@   IN  NS  ns2.example.com.

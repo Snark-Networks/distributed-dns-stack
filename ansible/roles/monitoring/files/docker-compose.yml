@@ -1,0 +1,79 @@
+---
+# Monitoring stack: Prometheus → scrapes metrics from DNS servers
+#                   Loki      → stores CoreDNS query logs (pushed by Promtail)
+#                   Grafana   → visualizes everything
+#
+# Promtail runs separately on each DNS server (roles/promtail) and pushes logs
+# to Loki. This compose file manages only the monitoring server components.
+#
+# All services use host networking (consistent with the DNS stack).
+# Grafana UI:   http://<server-ip>:3000   (admin / changeme — change this!)
+# Prometheus:   http://127.0.0.1:9090     (localhost only)
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    network_mode: host
+    user: root
+    volumes:
+      - /opt/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - /opt/monitoring/prometheus/data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.listen-address=127.0.0.1:9090'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: loki
+    restart: unless-stopped
+    network_mode: host
+    user: root
+    volumes:
+      - /opt/monitoring/loki/config.yml:/etc/loki/config.yml:ro
+      - /opt/monitoring/loki/data:/loki
+    command: -config.file=/etc/loki/config.yml
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    network_mode: host
+    user: root
+    environment:
+      # Change this password — only applied on first startup (fresh database)
+      GF_SECURITY_ADMIN_USER: admin
+      # After first login, change the password in the UI (Profile → Change Password).
+      # Env var is ignored after that — use grafana CLI to reset if locked out:
+      #   docker exec grafana grafana cli admin reset-admin-password 'newpassword'
+      GF_SECURITY_ADMIN_PASSWORD: "changeme"   # Change this — only applied on first startup
+      GF_SERVER_HTTP_ADDR: 0.0.0.0
+      GF_SERVER_HTTP_PORT: 3000
+      # Allow Grafana to load unsigned community panels if needed
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: ""
+    volumes:
+      - /opt/monitoring/grafana/data:/var/lib/grafana
+      - /opt/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+      - loki
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

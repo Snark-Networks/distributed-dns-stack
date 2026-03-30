@@ -1,0 +1,32 @@
+; Zone file: 0.0.8.b.d.0.1.0.0.2.ip6.arpa
+; Reverse DNS for 2001:db8::/40
+;
+; How IPv6 PTR records work:
+;   Full IPv6:  2001:db8:00f9:0002:0000:0000:0013:0001
+;   Expand to 32 nibbles, reverse them, append .ip6.arpa:
+;   Full PTR:   1.0.0.0.3.1.0.0.0.0.0.0.0.0.0.0.2.0.0.0.9.f.0.0.8.b.d.0.1.0.0.2.ip6.arpa.
+;   This zone covers the first 10 nibbles (2001:db8:00 = /40 prefix),
+;   so the label RELATIVE to this zone is the remaining 22 nibbles:
+;   1.0.0.0.3.1.0.0.0.0.0.0.0.0.0.0.2.0.0.0.9.f.0.0
+;
+; Use scripts/ipv6-ptr.sh <address> to compute the label for any address.
+;
+; This file contains SOA and NS records only.
+; PTR records are managed as template blocks in the Corefile — see
+; ansible/roles/coredns/templates/Corefile.j2 for explicit host entries
+; and the catch-all auto-PTR template.
+;
+$ORIGIN 0.0.8.b.d.0.1.0.0.2.ip6.arpa.
+$TTL 3600
+
+@   IN  SOA ns1.example.com. hostmaster.example.com. (
+            2026032802  ; Serial
+            3600        ; Refresh
+            900         ; Retry
+            604800      ; Expire
+            300         ; Minimum TTL
+        )
+
+; Name servers — update these to your actual NS hostnames
+@   IN  NS  ns1.example.com.
+@   IN  NS  ns2.example.com.

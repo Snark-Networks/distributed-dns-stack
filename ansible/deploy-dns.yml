@@ -1,0 +1,38 @@
+---
+# Deploy or update the full DNS tier (CoreDNS backends + dnsdist frontends).
+# CoreDNS is deployed first so dnsdist health checks succeed on startup.
+#
+# Usage:
+#   ansible-playbook deploy-dns.yml                     # all DNS servers
+#   ansible-playbook deploy-dns.yml -l coredns01        # one CoreDNS server only
+#   ansible-playbook deploy-dns.yml -l dnsdist01        # one dnsdist server only
+#
+# After adding a new server, also run deploy-monitoring.yml to update
+# the Prometheus scrape config to include the new server.
+
+- name: Install Docker on CoreDNS servers
+  hosts: coredns_servers
+  become: true
+  roles:
+    - docker
+
+- name: Install Docker on dnsdist servers
+  hosts: dnsdist_servers
+  become: true
+  roles:
+    - docker
+
+- name: Deploy CoreDNS (authoritative backend)
+  hosts: coredns_servers
+  become: true
+  roles:
+    - coredns
+    - dns-zones
+    - promtail
+
+- name: Deploy dnsdist (frontend load balancer)
+  hosts: dnsdist_servers
+  become: true
+  roles:
+    - dnsdist
+    - promtail

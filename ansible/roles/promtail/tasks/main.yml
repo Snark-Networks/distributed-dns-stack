@@ -1,0 +1,56 @@
+---
+- name: Create Promtail directory structure
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /opt/promtail
+    - /opt/promtail/positions
+
+- name: Deploy Promtail docker-compose.yml
+  copy:
+    src: docker-compose.yml
+    dest: /opt/promtail/docker-compose.yml
+    mode: "0644"
+  notify: Restart Promtail
+
+- name: Deploy Promtail configuration
+  template:
+    src: config.yml.j2
+    dest: /opt/promtail/config.yml
+    mode: "0644"
+  notify: Restart Promtail
+
+- name: Pull Promtail Docker image
+  command: docker compose -f /opt/promtail/docker-compose.yml pull
+  changed_when: false
+
+- name: Start Promtail
+  command: docker compose -f /opt/promtail/docker-compose.yml up -d
+  changed_when: false
+
+- name: Install systemd unit to start Promtail on boot
+  copy:
+    dest: /etc/systemd/system/promtail.service
+    content: |
+      [Unit]
+      Description=Promtail (DNS log shipper to Loki)
+      After=docker.service
+      Requires=docker.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      WorkingDirectory=/opt/promtail
+      ExecStart=/usr/bin/docker compose up -d
+      ExecStop=/usr/bin/docker compose down
+      TimeoutStartSec=60
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: "0644"
+  notify: Enable Promtail systemd unit
+
+- name: Flush handlers
+  meta: flush_handlers

@@ -1,0 +1,108 @@
+-- dnsdist.conf — Frontend load balancer for authoritative CoreDNS
+-- dnsdist version: 1.9.x
+--
+-- This file is a Jinja2 template rendered by Ansible at deploy time.
+-- Configurable variables:
+--   ansible/inventory/group_vars/all.yml              (dnsdist_webserver_password)
+--   ansible/inventory/group_vars/dnsdist_servers.yml  (dnsdist_webserver_address,
+--                                                       dnsdist_webserver_acl,
+--                                                       dnsdist_health_check_zone)
+--
+-- Backend resolution (site groups):
+--   If this dnsdist host belongs to a site_* group in inventory, only the
+--   coredns_servers in that same site_* group are used as backends.
+--   If no site group is defined, all coredns_servers become backends (global fallback).
+--
+--   Example inventory:
+--     site_us_east:
+--       hosts: [dnsdist-us-east, coredns-us-east-1, coredns-us-east-2]
+--     site_eu_west:
+--       hosts: [dnsdist-eu-west, coredns-eu-west-1]
+
+-- =========================================================================
+-- Listeners
+-- =========================================================================
+setLocal("0.0.0.0:53", { reusePort = true })
+addLocal("[::]:53",     { reusePort = true })
+
+-- =========================================================================
+-- Access Control
+-- =========================================================================
+setACL({ "0.0.0.0/0", "::/0" })
+
+-- =========================================================================
+-- Backends — CoreDNS instances
+-- =========================================================================
+{#
+  Find the CoreDNS backends for this specific dnsdist instance.
+
+  Strategy:
+    1. Look for any site_* groups this host belongs to.
+    2. Take the intersection with [coredns_servers] — those are this site's backends.
+    3. If no site group matches, fall back to all coredns_servers (global / all-in-one).
+
+  For co-located deployments (dnsdist and CoreDNS on the same host), the backend
+  address is automatically set to 127.0.0.1 instead of the host's public IP.
+#}
+{% set ns = namespace(backends=[]) %}
+{% for g in group_names | select('match', '^site_') | list %}
+  {% for host in groups[g] | default([]) %}
+    {% if host in groups['coredns_servers'] and host not in ns.backends %}
+      {% set ns.backends = ns.backends + [host] %}
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+{% if ns.backends | length == 0 %}
+  {% set ns.backends = groups['coredns_servers'] | default([]) %}
+{% endif %}
+-- Backends for {{ inventory_hostname }}:
+-- Site groups: {{ group_names | select('match', '^site_') | list | join(', ') or 'none (using global fallback)' }}
+-- Resolved backends: {{ ns.backends | join(', ') }}
+{% for host in ns.backends %}
+newServer({
+    address          = "{{ '127.0.0.1' if hostvars[host]['ansible_host'] == ansible_host else hostvars[host]['ansible_host'] }}:{{ coredns_dns_port | default(5300) }}",
+    name             = "{{ host }}",
+    checkType        = "SOA",
+    checkName        = "{{ dnsdist_health_check_zone }}",
+    checkInterval    = 5,
+    rise             = 2,
+    maxCheckFailures = 3,
+})
+{% endfor %}
+
+-- =========================================================================
+-- Load Balancing Policy
+-- =========================================================================
+setServerPolicy(leastOutstanding)
+
+-- =========================================================================
+-- Metrics: Web interface + Prometheus endpoint
+-- =========================================================================
+-- dnsdist_webserver_address is set in group_vars/dnsdist_servers.yml.
+-- Default: 0.0.0.0:8083 (all interfaces — needed when monitoring is on a separate host).
+-- Change to 127.0.0.1:8083 to restrict to localhost only.
+--
+-- SSH tunnel to access the web UI from your browser:
+--   ssh -L 8083:127.0.0.1:8083 root@YOUR_SERVER_IP
+--   then open http://localhost:8083
+webserver("{{ dnsdist_webserver_address }}")
+setWebserverConfig({
+    -- Password is set in group_vars/all.yml (dnsdist_webserver_password).
+    -- Must match basic_auth.password in prometheus/prometheus.yml (kept in sync automatically).
+    password = "{{ dnsdist_webserver_password }}",
+    -- ACL is set in group_vars/dnsdist_servers.yml (dnsdist_webserver_acl).
+    -- Add your monitoring server's IP here if it is on a separate host.
+    acl      = "{{ dnsdist_webserver_acl }}",
+})
+
+-- =========================================================================
+-- Query logging — ships client IPs to Loki via Promtail
+-- =========================================================================
+-- Logs every query to stdout (captured by Docker → Promtail → Loki).
+-- Format: Remote CLIENT_IP:PORT sent question for 'QNAME' (QTYPE) with id ID
+addAction(AllRule(), LogAction("", false, false, false))
+
+-- =========================================================================
+-- Optional: Rate limiting (DDoS protection)
+-- =========================================================================
+-- addAction(MaxQPSIPRule(100), DropAction())

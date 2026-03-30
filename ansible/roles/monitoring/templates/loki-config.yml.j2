@@ -1,0 +1,43 @@
+auth_enabled: false
+
+server:
+  # loki_http_listen_address is set in group_vars/monitoring_servers.yml.
+  # Default: 127.0.0.1 (localhost only — safe when Promtail is on the same server).
+  # Change to 0.0.0.0 when Promtail agents run on remote DNS servers.
+  http_listen_address: {{ loki_http_listen_address }}
+  http_listen_port: 3100
+  # gRPC is used for internal Loki clustering (not needed for single-node setups).
+  grpc_listen_address: {{ loki_grpc_listen_address }}
+  grpc_listen_port: 9096
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  retention_period: 720h   # Keep 30 days of logs
+
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true
+  # Required in Loki 3.x when retention_enabled is true
+  delete_request_store: filesystem

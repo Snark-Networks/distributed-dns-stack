@@ -1,0 +1,11 @@
+---
+# Shared variables — applied to all hosts in all groups.
+#
+# Change these before deploying to a real server.
+# The dnsdist password is used in both dnsdist.conf (on dnsdist_servers) and
+# prometheus.yml (on monitoring_servers), and is kept in sync automatically.
+
+# Password for the dnsdist web UI and Prometheus /metrics endpoint.
+# Must be the same value used in both dnsdist.conf and prometheus.yml.
+# Change this and run: make deploy
+dnsdist_webserver_password: "changeme"

@@ -1,0 +1,25 @@
+---
+# Deploy or update dnsdist frontend servers only.
+# Use this to add a new dnsdist server or update dnsdist config without
+# touching CoreDNS backends or monitoring.
+#
+# The backend list in dnsdist.conf is auto-generated from the [coredns_servers]
+# inventory group — add a CoreDNS server there and re-run this playbook to
+# include it as a dnsdist backend automatically.
+#
+# Usage:
+#   ansible-playbook deploy-dnsdist.yml               # all dnsdist_servers
+#   ansible-playbook deploy-dnsdist.yml -l dnsdist02  # one server only
+
+- name: Install Docker on dnsdist servers
+  hosts: dnsdist_servers
+  become: true
+  roles:
+    - docker
+
+- name: Deploy dnsdist (frontend load balancer)
+  hosts: dnsdist_servers
+  become: true
+  roles:
+    - dnsdist
+    - promtail
